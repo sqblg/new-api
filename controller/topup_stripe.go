@@ -37,6 +37,8 @@ type StripePayRequest struct {
 	// CancelURL is the optional custom URL to redirect when payment is canceled.
 	// If empty, defaults to the server's console topup page.
 	CancelURL string `json:"cancel_url,omitempty"`
+	// IdempotencyKey makes retries return the original pending checkout.
+	IdempotencyKey string `json:"idempotency_key,omitempty"`
 }
 
 type StripeAdaptor struct {
@@ -87,6 +89,17 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 
 	id := c.GetInt("id")
 	user, _ := model.GetUserById(id, false)
+	if strings.TrimSpace(req.IdempotencyKey) != "" {
+		replayed := model.GetTopUpByUserIdempotencyKey(id, strings.TrimSpace(req.IdempotencyKey))
+		if replayed != nil {
+			if replayed.Amount != req.Amount || replayed.PaymentMethod != model.PaymentMethodStripe {
+				c.JSON(http.StatusConflict, gin.H{"message": "error", "data": "幂等键已用于其他充值参数"})
+				return
+			}
+			c.JSON(http.StatusOK, gin.H{"message": "success", "data": gin.H{"pay_link": replayed.PayLink}})
+			return
+		}
+	}
 	chargedMoney := GetChargedAmount(float64(req.Amount), *user)
 
 	reference := fmt.Sprintf("new-api-ref-%d-%d-%s", user.Id, time.Now().UnixMilli(), randstr.String(4))
@@ -109,8 +122,16 @@ func (*StripeAdaptor) RequestPay(c *gin.Context, req *StripePayRequest) {
 		CreateTime:      time.Now().Unix(),
 		Status:          common.TopUpStatusPending,
 	}
+	if key := strings.TrimSpace(req.IdempotencyKey); key != "" {
+		topUp.IdempotencyKey = &key
+	}
+	topUp.PayLink = payLink
 	err = topUp.Insert()
 	if err != nil {
+		if replayed := model.GetTopUpByUserIdempotencyKey(id, strings.TrimSpace(req.IdempotencyKey)); replayed != nil && replayed.Amount == req.Amount && replayed.PaymentMethod == model.PaymentMethodStripe {
+			c.JSON(http.StatusOK, gin.H{"message": "success", "data": gin.H{"pay_link": replayed.PayLink}})
+			return
+		}
 		logger.LogError(c.Request.Context(), fmt.Sprintf("Stripe 创建充值订单失败 user_id=%d trade_no=%s amount=%d error=%q", id, referenceId, req.Amount, err.Error()))
 		c.JSON(http.StatusOK, gin.H{"message": "error", "data": "创建订单失败"})
 		return

@@ -17,6 +17,8 @@ type TopUp struct {
 	Amount          int64   `json:"amount"`
 	Money           float64 `json:"money"`
 	TradeNo         string  `json:"trade_no" gorm:"unique;type:varchar(255);index"`
+	IdempotencyKey  *string `json:"-" gorm:"type:varchar(255);index:idx_topup_user_idempotency,unique"`
+	PayLink         string  `json:"-" gorm:"type:text"`
 	PaymentMethod   string  `json:"payment_method" gorm:"type:varchar(50)"`
 	PaymentProvider string  `json:"payment_provider" gorm:"type:varchar(50);default:''"`
 	CreateTime      int64   `json:"create_time"`
@@ -74,6 +76,17 @@ func GetTopUpByTradeNo(tradeNo string) *TopUp {
 	var err error
 	err = DB.Where("trade_no = ?", tradeNo).First(&topUp).Error
 	if err != nil {
+		return nil
+	}
+	return topUp
+}
+
+func GetTopUpByUserIdempotencyKey(userId int, key string) *TopUp {
+	if userId <= 0 || key == "" {
+		return nil
+	}
+	var topUp *TopUp
+	if err := DB.Where("user_id = ? AND idempotency_key = ?", userId, key).First(&topUp).Error; err != nil {
 		return nil
 	}
 	return topUp
