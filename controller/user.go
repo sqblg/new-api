@@ -852,6 +852,7 @@ func UpdateSelf(c *gin.Context) {
 		Username:    user.Username,
 		Password:    user.Password,
 		DisplayName: user.DisplayName,
+		Email:       user.Email,
 	}
 	if user.Password == "$I_LOVE_U" {
 		user.Password = "" // rollback to what it should be
