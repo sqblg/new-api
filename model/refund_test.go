@@ -27,4 +27,7 @@ func TestRefundRequestIdempotencyAndAtomicApproval(t *testing.T) {
 	require.Equal(t, int(common.QuotaPerUnit)*17, updated.Quota)
 	require.Equal(t, RefundStatusApproved, GetRefundRequest(first.Id).Status)
 	require.Error(t, first.Approve(7))
+	second := &RefundRequest{UserId: user.Id, TopUpId: topUp.Id, Amount: 8, IdempotencyKey: "refund-key-2", Status: RefundStatusPending}
+	require.NoError(t, second.Insert())
+	require.Error(t, second.Approve(7))
 }

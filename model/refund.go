@@ -93,6 +93,13 @@ func (r *RefundRequest) Approve(operatorId int) error {
 		if topUp.UserId != current.UserId || topUp.Status != common.TopUpStatusSuccess || current.Amount <= 0 || current.Amount > topUp.Amount {
 			return errors.New("refund request is not eligible")
 		}
+		var approvedAmount int64
+		if err := tx.Model(&RefundRequest{}).Where("top_up_id = ? AND status = ?", current.TopUpId, RefundStatusApproved).Select("COALESCE(SUM(amount), 0)").Scan(&approvedAmount).Error; err != nil {
+			return err
+		}
+		if approvedAmount > topUp.Amount-current.Amount {
+			return errors.New("refund request exceeds the refundable top-up amount")
+		}
 		// The quota is credited in the same unit as TopUp.Amount. Keep the
 		// refund decision and balance debit in one transaction.
 		quota := current.Amount * int64(common.QuotaPerUnit)
