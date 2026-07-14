@@ -72,3 +72,25 @@ func ApproveRefund(c *gin.Context) {
 	}
 	common.ApiSuccess(c, model.GetRefundRequest(id))
 }
+
+func ApproveRefundByFields(c *gin.Context) {
+	var body struct {
+		UserId  int   `json:"user_id"`
+		TopUpId int   `json:"topup_id"`
+		Amount  int64 `json:"amount"`
+	}
+	if err := common.DecodeJson(c.Request.Body, &body); err != nil || body.UserId <= 0 || body.TopUpId <= 0 || body.Amount <= 0 {
+		common.ApiErrorMsg(c, "参数错误")
+		return
+	}
+	request := model.GetPendingRefund(body.UserId, body.TopUpId, body.Amount)
+	if request == nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "message": "待审批退款申请不存在"})
+		return
+	}
+	if err := request.Approve(c.GetInt("id")); err != nil {
+		c.JSON(http.StatusConflict, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	common.ApiSuccess(c, model.GetRefundRequest(request.Id))
+}

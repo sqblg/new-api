@@ -54,6 +54,14 @@ func GetRefundRequest(id int) *RefundRequest {
 	return &request
 }
 
+func GetPendingRefund(userId, topUpId int, amount int64) *RefundRequest {
+	var request RefundRequest
+	if err := DB.Where("user_id = ? AND top_up_id = ? AND amount = ? AND status = ?", userId, topUpId, amount, RefundStatusPending).Order("id asc").First(&request).Error; err != nil {
+		return nil
+	}
+	return &request
+}
+
 func ListRefundRequests(offset, limit int) ([]RefundRequest, int64, error) {
 	if limit <= 0 || limit > 100 {
 		limit = 20
